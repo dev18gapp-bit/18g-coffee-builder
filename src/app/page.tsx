@@ -150,7 +150,11 @@ const styles: Record<string, React.CSSProperties> = {
     position: 'relative',
     width: '100%',
     maxWidth: 960,
-    marginTop: 96,
+    // Clears the fixed site-header logo (which visually extends below its
+    // own box) — same clearance value proven on the Memory Wall's display
+    // page, with a little extra margin since this page's header sits
+    // directly above content rather than over a hero.
+    marginTop: 120,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
