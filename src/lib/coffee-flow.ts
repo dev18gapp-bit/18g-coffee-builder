@@ -51,8 +51,9 @@ export const STEPS: CoffeeStep[] = [
     id: 'grind',
     kind: 'process',
     eyebrow: 'Step 2',
-    title: 'Grinding to Order',
-    subtitle: 'Your beans are ground fresh, right before brewing, to lock in aroma and flavor.',
+    title: 'Weigh & Grind',
+    subtitle:
+      "Every shot starts with exactly 18 grams of beans — weighed by hand, then ground fresh into a fine powder and packed into the puck.",
     icon: '/images/coffee-icons/grinder.svg',
     cta: 'Next: Pull the shot',
   },
@@ -61,7 +62,8 @@ export const STEPS: CoffeeStep[] = [
     kind: 'process',
     eyebrow: 'Step 3',
     title: 'Pulling the Shot',
-    subtitle: 'Hot water is pressed through the grounds at high pressure, extracting a rich, concentrated espresso.',
+    subtitle:
+      'The packed puck locks into the espresso machine. Hot water is forced through it at high pressure, extracting a rich, concentrated shot — the perfect espresso.',
     icon: '/images/coffee-icons/espresso.svg',
     cta: 'Next: Choose your milk',
   },
