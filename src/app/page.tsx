@@ -4,11 +4,12 @@ import { useEffect, useRef, useState } from 'react';
 import SiteHeader from '@/components/site-header';
 import ProgressBar from '@/components/progress-bar';
 import OptionCard from '@/components/option-card';
-import { STEPS, findOption, type Selections } from '@/lib/coffee-flow';
+import { STEPS, findOption, fetchCoffeeBuilderOptions, type CoffeeStep, type Selections } from '@/lib/coffee-flow';
 
 const AUTO_ADVANCE_MS = 650;
 
 export default function BuilderPage() {
+  const [steps, setSteps] = useState<CoffeeStep[]>(STEPS);
   const [stepIndex, setStepIndex] = useState(0);
   const [selections, setSelections] = useState<Selections>({});
   const advanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -19,12 +20,29 @@ export default function BuilderPage() {
     };
   }, []);
 
-  const step = STEPS[stepIndex];
+  // Pull the live bean/milk/syrup catalog once on load. Falls back silently
+  // to the placeholder lists in coffee-flow.ts if the fetch fails or a
+  // category has nothing added in admin yet — the kiosk should never sit
+  // there blank.
+  useEffect(() => {
+    fetchCoffeeBuilderOptions().then((fetched) => {
+      if (!fetched) return;
+      setSteps((prev) =>
+        prev.map((s) => {
+          if (!s.optionsCategory) return s;
+          const live = fetched[s.optionsCategory];
+          return live.length > 0 ? { ...s, options: live } : s;
+        })
+      );
+    });
+  }, []);
+
+  const step = steps[stepIndex];
   const isFirst = stepIndex === 0;
-  const isLast = stepIndex === STEPS.length - 1;
+  const isLast = stepIndex === steps.length - 1;
 
   function goNext() {
-    setStepIndex((i) => Math.min(i + 1, STEPS.length - 1));
+    setStepIndex((i) => Math.min(i + 1, steps.length - 1));
   }
 
   function goBack() {
@@ -44,7 +62,7 @@ export default function BuilderPage() {
     setStepIndex(0);
   }
 
-  const recapSteps = STEPS.filter((s) => s.kind === 'choice');
+  const recapSteps = steps.filter((s) => s.kind === 'choice');
 
   return (
     <>
@@ -57,7 +75,7 @@ export default function BuilderPage() {
             </button>
           )}
           <div style={styles.progressSlot}>
-            <ProgressBar current={stepIndex} total={STEPS.length} />
+            <ProgressBar current={stepIndex} total={steps.length} />
           </div>
         </div>
 
@@ -73,7 +91,7 @@ export default function BuilderPage() {
                   key={option.id}
                   name={option.name}
                   description={option.description}
-                  icon={step.icon}
+                  icon={option.imageUrl || step.icon}
                   selected={selections[step.id] === option.id}
                   onSelect={() => handleSelect(option.id)}
                 />

@@ -43,6 +43,8 @@ const styles: Record<string, React.CSSProperties> = {
   icon: {
     width: 64,
     height: 64,
+    objectFit: 'cover',
+    borderRadius: 8,
   },
   name: {
     color: '#F5ECD7',

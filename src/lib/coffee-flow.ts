@@ -1,10 +1,14 @@
+import { API_URL } from './api';
+
 export type StepKind = 'choice' | 'process' | 'summary';
+export type OptionCategory = 'bean' | 'milk' | 'syrup';
 
 export interface CoffeeOption {
   id: string;
   name: string;
   /** Shown on the card — e.g. aroma/flavor notes for a bean, or a short blurb for milk/syrup. */
   description: string;
+  imageUrl?: string | null;
 }
 
 export interface CoffeeStep {
@@ -14,17 +18,19 @@ export interface CoffeeStep {
   title: string;
   subtitle: string;
   icon: string;
-  /** Present when kind === 'choice'. */
+  /** Present on bean/milk/syrup steps — their options come from the admin-managed catalog. */
+  optionsCategory?: OptionCategory;
+  /** Static options (e.g. hot/iced), or the placeholder/fetched list for a dynamic step. */
   options?: CoffeeOption[];
   /** Custom "Next" button label for process/summary steps. */
   cta?: string;
 }
 
 // ---------------------------------------------------------------------------
-// PLACEHOLDER CONTENT — the actual bean/milk/syrup lineup, copy, and photos
-// will come from the shop owner. Everything here just proves out the flow.
-// Swap `icon` paths for real photography per item once available; for now
-// every option within a step shares one representative icon.
+// Bean/milk/syrup options are admin-managed (see /admin) and stored in the
+// shared 18gCoffeeDB — fetchCoffeeBuilderOptions() below pulls the live
+// catalog. The lists here are just a fallback shown if that fetch comes back
+// empty (nothing added in admin yet) or fails, so the kiosk is never blank.
 // ---------------------------------------------------------------------------
 export const STEPS: CoffeeStep[] = [
   {
@@ -34,6 +40,7 @@ export const STEPS: CoffeeStep[] = [
     title: 'Choose Your Bean',
     subtitle: 'Give each one a smell before you pick — the aroma tells you a lot about the cup.',
     icon: '/images/coffee-icons/bean.svg',
+    optionsCategory: 'bean',
     options: [
       { id: 'yirgacheffe', name: 'Ethiopian Yirgacheffe', description: 'Bright and floral, with notes of jasmine and citrus.' },
       { id: 'colombian', name: 'Colombian Supremo', description: 'Balanced and smooth, with caramel and toasted nut notes.' },
@@ -65,6 +72,7 @@ export const STEPS: CoffeeStep[] = [
     title: 'Choose Your Milk',
     subtitle: 'Pick what goes with your espresso.',
     icon: '/images/coffee-icons/milk.svg',
+    optionsCategory: 'milk',
     options: [
       { id: 'whole', name: 'Whole Milk', description: 'Creamy and classic.' },
       { id: 'oat', name: 'Oat Milk', description: 'Naturally sweet, dairy-free.' },
@@ -79,6 +87,7 @@ export const STEPS: CoffeeStep[] = [
     title: 'Choose Your Syrup',
     subtitle: 'Add a little something extra — or skip it.',
     icon: '/images/coffee-icons/syrup.svg',
+    optionsCategory: 'syrup',
     options: [
       { id: 'vanilla', name: 'Vanilla', description: 'Warm and classic.' },
       { id: 'caramel', name: 'Caramel', description: 'Rich and buttery.' },
@@ -113,4 +122,42 @@ export type Selections = Record<string, string>; // stepId -> optionId
 
 export function findOption(step: CoffeeStep, optionId: string | undefined): CoffeeOption | undefined {
   return step.options?.find((o) => o.id === optionId);
+}
+
+type FetchedOptions = Record<OptionCategory, CoffeeOption[]>;
+
+/**
+ * Pulls the live bean/milk/syrup catalog from the API. Returns null on any
+ * failure (network down, API not deployed yet, etc.) so callers can fall
+ * back to the placeholder lists above rather than showing a blank screen.
+ */
+export async function fetchCoffeeBuilderOptions(): Promise<FetchedOptions | null> {
+  try {
+    const res = await fetch(`${API_URL}/coffee-builder-options`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    return {
+      bean: Array.isArray(data.bean) ? data.bean.map(mapApiOption) : [],
+      milk: Array.isArray(data.milk) ? data.milk.map(mapApiOption) : [],
+      syrup: Array.isArray(data.syrup) ? data.syrup.map(mapApiOption) : [],
+    };
+  } catch {
+    return null;
+  }
+}
+
+interface ApiOptionRow {
+  id: string;
+  name: string;
+  description?: string | null;
+  image_url?: string | null;
+}
+
+function mapApiOption(row: ApiOptionRow): CoffeeOption {
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description ?? '',
+    imageUrl: row.image_url ?? null,
+  };
 }
