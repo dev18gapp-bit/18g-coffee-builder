@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" fill="none">
+  <path
+    d="M100,15 C135,15 165,50 165,100 C165,150 135,185 100,185 C65,185 35,150 35,100 C35,50 65,15 100,15 Z"
+    stroke="#C9A84C" stroke-width="6" fill="#C9A84C" fill-opacity="0.06"
+  />
+  <path
+    d="M100,32 C88,58 112,76 98,100 C84,124 108,146 98,168"
+    stroke="#C9A84C" stroke-width="5" stroke-linecap="round"
+  />
+</svg>
