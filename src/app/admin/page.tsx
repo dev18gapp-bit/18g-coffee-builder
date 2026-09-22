@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { API_URL } from '@/lib/api';
+import { type ImagePayload } from '@/lib/files';
+import PhotoUpload from '@/components/photo-upload';
 
 interface OptionRow {
   id: string;
@@ -14,12 +16,24 @@ interface OptionRow {
   active: boolean;
 }
 
-type Category = 'bean' | 'milk' | 'syrup';
+interface StepImageRow {
+  step_id: string;
+  image_url: string | null;
+}
+
+type Category = 'bean' | 'milk' | 'syrup' | 'temperature';
 
 const CATEGORIES: { id: Category; label: string }[] = [
   { id: 'bean', label: 'Beans' },
   { id: 'milk', label: 'Milk' },
   { id: 'syrup', label: 'Syrup' },
+  { id: 'temperature', label: 'Temperature' },
+];
+
+const STEP_IMAGE_SLOTS: { id: string; label: string }[] = [
+  { id: 'grind', label: 'Grind' },
+  { id: 'espresso', label: 'Espresso' },
+  { id: 'cup', label: 'Cup' },
 ];
 
 export default function AdminPage() {
@@ -27,10 +41,12 @@ export default function AdminPage() {
   const [token, setToken] = useState<string | null>(null);
   const [category, setCategory] = useState<Category>('bean');
   const [options, setOptions] = useState<OptionRow[]>([]);
+  const [stepImages, setStepImages] = useState<StepImageRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [newName, setNewName] = useState('');
   const [newDescription, setNewDescription] = useState('');
+  const [newImage, setNewImage] = useState<ImagePayload | null>(null);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState('');
 
@@ -54,16 +70,21 @@ export default function AdminPage() {
       setLoading(true);
       setError('');
       try {
-        const res = await fetch(`${API_URL}/coffee-builder-admin/options?category=${activeCategory}`, {
-          headers: { Authorization: `Bearer ${activeToken}` },
-        });
-        if (res.status === 401) {
+        const [optionsRes, stepImagesRes] = await Promise.all([
+          fetch(`${API_URL}/coffee-builder-admin/options?category=${activeCategory}`, {
+            headers: { Authorization: `Bearer ${activeToken}` },
+          }),
+          fetch(`${API_URL}/coffee-builder-admin/step-images`, {
+            headers: { Authorization: `Bearer ${activeToken}` },
+          }),
+        ]);
+        if (optionsRes.status === 401 || stepImagesRes.status === 401) {
           localStorage.removeItem('coffeeBuilderAdminToken');
           router.push('/admin/login');
           return;
         }
-        const data = await res.json();
-        setOptions(data);
+        setOptions(await optionsRes.json());
+        setStepImages(await stepImagesRes.json());
       } catch {
         setError('Could not load options — check your connection and try again.');
       } finally {
@@ -95,10 +116,12 @@ export default function AdminPage() {
           name: newName.trim(),
           description: newDescription.trim(),
           sortOrder: options.length,
+          ...(newImage ? { image: newImage } : {}),
         }),
       });
       setNewName('');
       setNewDescription('');
+      setNewImage(null);
       await load(token, category);
     } finally {
       setCreating(false);
@@ -108,12 +131,18 @@ export default function AdminPage() {
   async function patchOption(id: string, patch: Record<string, unknown>) {
     if (!token) return;
     setBusyId(id);
+    setError('');
     try {
-      await fetch(`${API_URL}/coffee-builder-admin/options/${id}`, {
+      const res = await fetch(`${API_URL}/coffee-builder-admin/options/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify(patch),
       });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setError(body.error || 'Could not save that change.');
+        return;
+      }
       await load(token, category);
     } finally {
       setBusyId(null);
@@ -159,6 +188,27 @@ export default function AdminPage() {
     }
   }
 
+  async function uploadStepImage(stepId: string, image: ImagePayload) {
+    if (!token) return;
+    setBusyId(`step_${stepId}`);
+    setError('');
+    try {
+      const res = await fetch(`${API_URL}/coffee-builder-admin/step-images/${stepId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ image }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setError(body.error || 'Could not upload that photo.');
+        return;
+      }
+      await load(token, category);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   function signOut() {
     localStorage.removeItem('coffeeBuilderAdminToken');
     router.push('/admin/login');
@@ -178,6 +228,30 @@ export default function AdminPage() {
         </button>
       </div>
 
+      {error && <p style={styles.errorText}>{error}</p>}
+
+      <section style={styles.section}>
+        <p style={styles.sectionTitle}>Step Photos</p>
+        <p style={styles.sectionHint}>One photo each for the steps that aren&apos;t a pick-a-flavor list.</p>
+        <div style={styles.stepImageRow}>
+          {STEP_IMAGE_SLOTS.map((slot) => {
+            const row = stepImages.find((s) => s.step_id === slot.id);
+            return (
+              <div key={slot.id} style={styles.stepImageCard}>
+                <span style={styles.stepImageLabel}>{slot.label}</span>
+                <PhotoUpload
+                  imageUrl={row?.image_url}
+                  size={72}
+                  busy={busyId === `step_${slot.id}`}
+                  onUpload={(image) => uploadStepImage(slot.id, image)}
+                  onError={setError}
+                />
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
       <div style={styles.tabs}>
         {CATEGORIES.map((c) => (
           <button
@@ -191,24 +265,29 @@ export default function AdminPage() {
       </div>
 
       <form style={styles.addForm} onSubmit={handleCreate}>
-        <input
-          style={styles.addInput}
-          placeholder={`New ${category} name…`}
-          value={newName}
-          onChange={(e) => setNewName(e.target.value)}
+        <div style={styles.addFormRow}>
+          <input
+            style={styles.addInput}
+            placeholder={`New ${category} name…`}
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+          />
+          <input
+            style={{ ...styles.addInput, flex: 2 }}
+            placeholder="Short description (aroma notes, flavor, etc.)"
+            value={newDescription}
+            onChange={(e) => setNewDescription(e.target.value)}
+          />
+          <button type="submit" style={styles.addBtn} disabled={creating || !newName.trim()}>
+            {creating ? 'Adding…' : 'Add'}
+          </button>
+        </div>
+        <PhotoUpload
+          imageUrl={newImage ? `data:${newImage.contentType};base64,${newImage.data}` : null}
+          onUpload={setNewImage}
+          onError={setError}
         />
-        <input
-          style={{ ...styles.addInput, flex: 2 }}
-          placeholder="Short description (aroma notes, flavor, etc.)"
-          value={newDescription}
-          onChange={(e) => setNewDescription(e.target.value)}
-        />
-        <button type="submit" style={styles.addBtn} disabled={creating || !newName.trim()}>
-          {creating ? 'Adding…' : 'Add'}
-        </button>
       </form>
-
-      {error && <p style={styles.errorText}>{error}</p>}
 
       {loading ? (
         <p style={styles.emptyText}>Loading…</p>
@@ -236,6 +315,13 @@ export default function AdminPage() {
                   ↓
                 </button>
               </div>
+
+              <PhotoUpload
+                imageUrl={o.image_url}
+                busy={busyId === o.id}
+                onUpload={(image) => patchOption(o.id, { image })}
+                onError={setError}
+              />
 
               <div style={styles.rowFields}>
                 <input
@@ -309,6 +395,44 @@ const styles: Record<string, React.CSSProperties> = {
     textTransform: 'uppercase',
     cursor: 'pointer',
   },
+  section: {
+    marginBottom: 32,
+    maxWidth: 820,
+    border: '1px solid rgba(245,236,215,0.12)',
+    borderRadius: 10,
+    padding: '18px 22px',
+  },
+  sectionTitle: {
+    color: '#F5ECD7',
+    fontFamily: 'var(--font-playfair)',
+    fontSize: 16,
+    fontWeight: 600,
+  },
+  sectionHint: {
+    marginTop: 4,
+    marginBottom: 16,
+    color: 'rgba(245,236,215,0.45)',
+    fontFamily: 'var(--font-raleway)',
+    fontSize: 12,
+  },
+  stepImageRow: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: 24,
+  },
+  stepImageCard: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 8,
+  },
+  stepImageLabel: {
+    color: 'rgba(245,236,215,0.55)',
+    fontFamily: 'var(--font-raleway)',
+    fontSize: 11,
+    fontWeight: 600,
+    letterSpacing: '1px',
+    textTransform: 'uppercase',
+  },
   tabs: {
     display: 'flex',
     gap: 12,
@@ -334,10 +458,15 @@ const styles: Record<string, React.CSSProperties> = {
   },
   addForm: {
     display: 'flex',
-    flexWrap: 'wrap',
+    flexDirection: 'column',
     gap: 12,
     marginBottom: 24,
     maxWidth: 820,
+  },
+  addFormRow: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: 12,
   },
   addInput: {
     flex: 1,

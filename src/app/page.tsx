@@ -20,18 +20,22 @@ export default function BuilderPage() {
     };
   }, []);
 
-  // Pull the live bean/milk/syrup catalog once on load. Falls back silently
-  // to the placeholder lists in coffee-flow.ts if the fetch fails or a
-  // category has nothing added in admin yet — the kiosk should never sit
-  // there blank.
+  // Pull the live catalog + step photos once on load. Falls back silently to
+  // the placeholder content in coffee-flow.ts if the fetch fails, a category
+  // has nothing added in admin yet, or a step has no custom photo — the
+  // kiosk should never sit there blank.
   useEffect(() => {
     fetchCoffeeBuilderOptions().then((fetched) => {
       if (!fetched) return;
       setSteps((prev) =>
         prev.map((s) => {
-          if (!s.optionsCategory) return s;
-          const live = fetched[s.optionsCategory];
-          return live.length > 0 ? { ...s, options: live } : s;
+          const liveOptions = s.optionsCategory ? fetched.options[s.optionsCategory] : undefined;
+          const stepImage = fetched.stepImages[s.id as keyof typeof fetched.stepImages];
+          return {
+            ...s,
+            options: liveOptions && liveOptions.length > 0 ? liveOptions : s.options,
+            icon: stepImage || s.icon,
+          };
         })
       );
     });

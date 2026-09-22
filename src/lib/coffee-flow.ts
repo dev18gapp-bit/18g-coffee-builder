@@ -1,7 +1,8 @@
 import { API_URL } from './api';
 
 export type StepKind = 'choice' | 'process' | 'summary';
-export type OptionCategory = 'bean' | 'milk' | 'syrup';
+export type OptionCategory = 'bean' | 'milk' | 'syrup' | 'temperature';
+export type StepImageId = 'grind' | 'espresso' | 'cup';
 
 export interface CoffeeOption {
   id: string;
@@ -104,6 +105,7 @@ export const STEPS: CoffeeStep[] = [
     title: 'Hot or Iced?',
     subtitle: 'How would you like it served?',
     icon: '/images/coffee-icons/hot.svg',
+    optionsCategory: 'temperature',
     options: [
       { id: 'hot', name: 'Hot', description: 'Served warm, right away.' },
       { id: 'iced', name: 'Iced', description: 'Served cold, over ice.' },
@@ -126,22 +128,36 @@ export function findOption(step: CoffeeStep, optionId: string | undefined): Coff
   return step.options?.find((o) => o.id === optionId);
 }
 
-type FetchedOptions = Record<OptionCategory, CoffeeOption[]>;
+interface FetchedCatalog {
+  options: Record<OptionCategory, CoffeeOption[]>;
+  stepImages: Partial<Record<StepImageId, string>>;
+}
 
 /**
- * Pulls the live bean/milk/syrup catalog from the API. Returns null on any
- * failure (network down, API not deployed yet, etc.) so callers can fall
- * back to the placeholder lists above rather than showing a blank screen.
+ * Pulls the live bean/milk/syrup/temperature catalog and the grind/espresso/
+ * cup step photos from the API. Returns null on any failure (network down,
+ * API not deployed yet, etc.) so callers can fall back to the placeholder
+ * content above rather than showing a blank screen.
  */
-export async function fetchCoffeeBuilderOptions(): Promise<FetchedOptions | null> {
+export async function fetchCoffeeBuilderOptions(): Promise<FetchedCatalog | null> {
   try {
     const res = await fetch(`${API_URL}/coffee-builder-options`);
     if (!res.ok) return null;
     const data = await res.json();
+
+    const stepImages: Partial<Record<StepImageId, string>> = {};
+    (['grind', 'espresso', 'cup'] as StepImageId[]).forEach((id) => {
+      if (data.stepImages?.[id]) stepImages[id] = data.stepImages[id];
+    });
+
     return {
-      bean: Array.isArray(data.bean) ? data.bean.map(mapApiOption) : [],
-      milk: Array.isArray(data.milk) ? data.milk.map(mapApiOption) : [],
-      syrup: Array.isArray(data.syrup) ? data.syrup.map(mapApiOption) : [],
+      options: {
+        bean: Array.isArray(data.bean) ? data.bean.map(mapApiOption) : [],
+        milk: Array.isArray(data.milk) ? data.milk.map(mapApiOption) : [],
+        syrup: Array.isArray(data.syrup) ? data.syrup.map(mapApiOption) : [],
+        temperature: Array.isArray(data.temperature) ? data.temperature.map(mapApiOption) : [],
+      },
+      stepImages,
     };
   } catch {
     return null;
